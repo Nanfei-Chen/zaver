@@ -113,10 +113,10 @@ int main(int argc, char *argv[])
      * initialize listening socket
      */
     int listenfd;
-    struct sockaddr_in clientaddr;
-    // initialize clientaddr and inlen to solve "accept Invalid argument" bug
+    struct sockaddr_in client_addr;
+    // initialize client_addr and inlen to solve "accept Invalid argument" bug
     socklen_t inlen = 1;
-    memset(&clientaddr, 0, sizeof(struct sockaddr_in));
+    memset(&client_addr, 0, sizeof(struct sockaddr_in));
 
     listenfd = open_listenfd(cf.port);
     rc = make_socket_non_blocking(listenfd);
@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
     while (1)
     {
         time = zv_find_timer();
-        debug("wait time = %d", time);
+        log_info("the maximum wait time in milliseconds: %d", time);
         n = zv_epoll_wait(epfd, events, MAXEVENTS, time);
         zv_handle_expire_timers();
 
@@ -165,15 +165,13 @@ int main(int argc, char *argv[])
         {
             zv_http_request_t *r = (zv_http_request_t *)events[i].data.ptr;
             fd = r->fd;
-
             if (listenfd == fd)
             {
                 /* we hava one or more incoming connections */
-
                 int infd;
                 while (1)
                 {
-                    infd = accept(listenfd, (struct sockaddr *)&clientaddr, &inlen);
+                    infd = accept(listenfd, (struct sockaddr *)&client_addr, &inlen);
                     if (infd < 0)
                     {
                         if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
@@ -183,14 +181,14 @@ int main(int argc, char *argv[])
                         }
                         else
                         {
-                            log_err("accept");
+                            log_err("accept, error number %d", errno);
                             break;
                         }
                     }
 
                     rc = make_socket_non_blocking(infd);
                     check(rc == 0, "make_socket_non_blocking");
-                    log_info("new connection fd %d", infd);
+                    log_info("a new incoming connection, fd %d", infd);
 
                     zv_http_request_t *request = (zv_http_request_t *)malloc(sizeof(zv_http_request_t));
                     if (request == NULL)
@@ -205,7 +203,7 @@ int main(int argc, char *argv[])
 
                     zv_epoll_add(epfd, infd, &event);
                     zv_add_timer(request, TIMEOUT_DEFAULT, zv_http_close_conn);
-                } // end of while of accept
+                }
             }
             else
             {
@@ -213,19 +211,20 @@ int main(int argc, char *argv[])
                     (events[i].events & EPOLLHUP) ||
                     (!(events[i].events & EPOLLIN)))
                 {
-                    log_err("epoll error fd: %d", r->fd);
+                    log_err("epoll error, fd %d", r->fd);
                     close(fd);
                     continue;
                 }
 
                 log_info("new data from fd %d", fd);
+                
                 // rc = threadpool_add(tp, do_request, events[i].data.ptr);
                 // check(rc == 0, "threadpool_add");
 
                 do_request(events[i].data.ptr);
             }
-        } // end of for
-    }     // end of while(1)
+        }
+    }
 
     /*
     if (threadpool_destroy(tp, 1) < 0) {
