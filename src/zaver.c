@@ -161,6 +161,7 @@ int main(int argc, char *argv[])
         n = zv_epoll_wait(epfd, events, MAXEVENTS, time);
         zv_handle_expire_timers();
 
+        log_info("there is %d epoll events", n);
         for (i = 0; i < n; i++)
         {
             zv_http_request_t *r = (zv_http_request_t *)events[i].data.ptr;
@@ -169,6 +170,7 @@ int main(int argc, char *argv[])
             {
                 /* we hava one or more incoming connections */
                 int infd;
+                log_info("is ready to accept new connections, listenfd %d", listenfd);
                 while (1)
                 {
                     infd = accept(listenfd, (struct sockaddr *)&client_addr, &inlen);
@@ -204,6 +206,7 @@ int main(int argc, char *argv[])
                     zv_epoll_add(epfd, infd, &event);
                     zv_add_timer(request, TIMEOUT_DEFAULT, zv_http_close_conn);
                 }
+                log_info("accept ends");
             }
             else
             {
@@ -216,15 +219,19 @@ int main(int argc, char *argv[])
                     continue;
                 }
 
-                log_info("new data from fd %d", fd);
-                
+                log_info("there is new data from fd %d", fd);
+
                 // rc = threadpool_add(tp, do_request, events[i].data.ptr);
                 // check(rc == 0, "threadpool_add");
 
                 do_request(events[i].data.ptr);
             }
         }
+
+        log_info("has processed %d epoll events", n);
     }
+
+    log_info("epoll_wait loop ends");
 
     /*
     if (threadpool_destroy(tp, 1) < 0) {
